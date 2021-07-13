@@ -16,6 +16,7 @@ PURPOSE:
 
 FUNCTIONS INCLUDED:
     read_in_data_fits
+    create_wcs
 
 MODIFICATION HISTORY:
 		v.1.0 - first created August 2019
@@ -24,7 +25,7 @@ MODIFICATION HISTORY:
 
 
 from astropy.io import fits
-from astropy.coordinates import SkyCoord, EarthLocation
+from astropy.wcs import WCS
 from astropy import units
 from astropy import constants as consts
 
@@ -42,7 +43,7 @@ def read_in_data_fits(filename):
     Returns
     -------
     data : :obj:'~numpy.ndarray'
-        the data cube
+        the fits data as a numpy array
 
     header : FITS header
         the fits header
@@ -54,3 +55,23 @@ def read_in_data_fits(filename):
     hdu.close()
 
     return data, header
+
+
+def create_wcs(header):
+    """
+    Reads in the fits header and creates the wcs
+
+    Parameters
+    ----------
+    header : FITS header object
+        the header for the fits file to read in
+
+    Returns
+    -------
+    fits_wcs : astropy WCS object
+        the world coordinate system for the fits file
+    """
+    #create the WCS
+    fits_wcs = WCS(fits_header)
+
+    return fits_wcs
