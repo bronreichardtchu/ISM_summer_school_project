@@ -23,14 +23,14 @@ MODIFICATION HISTORY:
 """
 import numpy as np
 from astropy.wcs import WCS
-from reproject import reproject_interp()
+from reproject import reproject_interp
 
 import matplotlib.pyplot as plt
 import cmasher as cmr
 
 import read_in_cubes as ric
 
-def map_cube(data, fits_wcs, title, log_data=False, diverging=False):
+def map_cube(data, fits_wcs, title, ax=None, log_data=False, diverging=False):
     """
     Maps the fits data to an imshow on a matplotlib axis
 
@@ -40,10 +40,14 @@ def map_cube(data, fits_wcs, title, log_data=False, diverging=False):
         the fits data as a numpy array
 
     fits_wcs : astropy WCS object
-        the world coordinate system for the fits file
+        the world coordinate system for the fits file (if not inputing an axes)
 
     title : str
         the title for the plot
+
+    ax : matplotlib Axes instance
+        the axes you want to plot onto.  Default is None, creates its own axes.
+        If you already have axes, they need to already be in the right projection.
 
     log_data : boolean
         whether to take the logarithm of the data (default=False)
@@ -58,9 +62,9 @@ def map_cube(data, fits_wcs, title, log_data=False, diverging=False):
     if log_data == True:
         data = np.log10(data)
 
-    plt.figure()
+    if ax is None:
+        ax = plt.subplot(projection=fits_wcs)
 
-    ax = plt.subplot(projection=fits_wcs)
     ax.set_facecolor('white')
     #do the plotting
     if diverging == True:
@@ -98,37 +102,55 @@ def maps_in_single_figure(IR_file, CO_M0_file, CO_M1_file, HI_M0_file, HI_M1_fil
     IR_wcs = ric.create_wcs(IR_header)
 
     CO_M0_data, CO_M0_header = ric.read_in_data_fits(CO_M0_file)
-    #CO_M0_wcs = ric.create_wcs(CO_M0_header)
+    CO_M0_wcs = ric.create_wcs(CO_M0_header)
 
     CO_M1_data, CO_M1_header = ric.read_in_data_fits(CO_M1_file)
-    #CO_M1_wcs = ric.create_wcs(CO_M1_header)
+    CO_M1_wcs = ric.create_wcs(CO_M1_header)
 
     HI_M0_data, HI_M0_header = ric.read_in_data_fits(HI_M0_file)
-    #HI_M0_wcs = ric.create_wcs(HI_M0_header)
+    HI_M0_wcs = ric.create_wcs(HI_M0_header)
 
     HI_M1_data, HI_M1_header = ric.read_in_data_fits(HI_M1_file)
-    #HI_M1_wcs = ric.create_wcs(HI_M1_header)
+    HI_M1_wcs = ric.create_wcs(HI_M1_header)
+
+    #create a list of the data arrays
+    data_arrays = [IR_data, CO_M0_data, CO_M1_data, HI_M0_data, HI_M1_data]
+
+    #list of headers
+    headers = [IR_header, CO_M0_header, CO_M1_header, HI_M0_header, HI_M1_header]
+
+    #list of wcs
+    wcs_list = [IR_wcs, CO_M0_wcs, CO_M1_wcs, HI_M0_wcs, HI_M1_wcs]
 
     #reproject the data to match the stellar data
-    CO_M0_data, CO_M0_footprint = reproject_interp(CO_M0_data, IR_wcs)
-    CO_M1_data, CO_M1_footprint = reproject_interp(CO_M1_data, IR_wcs)
-    HI_M0_data, HI_M0_footprint = reproject_interp(HI_M0_data, IR_wcs)
-    HI_M1_data, HI_M1_footprint = reproject_interp(HI_M1_data, IR_wcs)
+    #CO_M0_data, CO_M0_footprint = reproject_interp((CO_M0_data, CO_M0_header), IR_wcs)
+    #CO_M1_data, CO_M1_footprint = reproject_interp((CO_M1_data, CO_M1_header), IR_wcs)
+    #HI_M0_data, HI_M0_footprint = reproject_interp((HI_M0_data, HI_M0_header), IR_wcs)
+    #HI_M1_data, HI_M1_footprint = reproject_interp((HI_M1_data, HI_M1_header), IR_wcs)
 
     #create a figure
-    plt.figure()
+    fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(10,6), subplot_kw={'projection': IR_wcs})
 
-    #iterate through files
-    for i, file in enumerate(filenames):
-        data, header = ric.read_in_data_fits(file)
-        fits_wcs = ric.create_wcs(header)
+    #iterate through the data
+    for i, data in enumerate(data_arrays):
 
         #if the shape has too many parts get rid of the outer ones
         #this is particularly for the THINGS data
         if len(data.shape) > 2:
             print('flattening data a bit')
             data = data[0,0,:,:]
-            fits_wcs = fits_wcs[0,0]
+            wcs_list[i] = wcs_list[i][0,0]
+
+        #reproject the data (not for the first one)
+        if i > 0:
+            reprojected_data, footprint = reproject_interp((data, wcs_list[i]), IR_header)
+
+
 
         #make the figures
-        map_cube(data, fits_wcs, title=titles[i], diverging=diverging[i], log_data=log_data[i])
+        if i < 3:
+            map_cube(data, IR_wcs, title=titles[i], ax=axes[int(np.floor(i/3)), i], diverging=diverging[i], log_data=log_data[i])
+        else:
+            map_cube(data, IR_wcs, title=titles[i], ax=axes[int(np.floor(i/3)), i-3], diverging=diverging[i], log_data=log_data[i])
+
+    plt.show()
