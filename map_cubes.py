@@ -98,19 +98,22 @@ def maps_in_single_figure(IR_file, CO_M0_file, CO_M1_file, HI_M0_file, HI_M1_fil
     IR_wcs = ric.create_wcs(IR_header)
 
     CO_M0_data, CO_M0_header = ric.read_in_data_fits(CO_M0_file)
-    CO_M0_wcs = ric.create_wcs(CO_M0_header)
+    #CO_M0_wcs = ric.create_wcs(CO_M0_header)
 
     CO_M1_data, CO_M1_header = ric.read_in_data_fits(CO_M1_file)
-    CO_M1_wcs = ric.create_wcs(CO_M1_header)
+    #CO_M1_wcs = ric.create_wcs(CO_M1_header)
 
     HI_M0_data, HI_M0_header = ric.read_in_data_fits(HI_M0_file)
-    HI_M0_wcs = ric.create_wcs(HI_M0_header)
+    #HI_M0_wcs = ric.create_wcs(HI_M0_header)
 
     HI_M1_data, HI_M1_header = ric.read_in_data_fits(HI_M1_file)
-    HI_M1_wcs = ric.create_wcs(HI_M1_header)
+    #HI_M1_wcs = ric.create_wcs(HI_M1_header)
 
-    #reproject the data
-
+    #reproject the data to match the stellar data
+    CO_M0_data, CO_M0_footprint = reproject_interp(CO_M0_data, IR_wcs)
+    CO_M1_data, CO_M1_footprint = reproject_interp(CO_M1_data, IR_wcs)
+    HI_M0_data, HI_M0_footprint = reproject_interp(HI_M0_data, IR_wcs)
+    HI_M1_data, HI_M1_footprint = reproject_interp(HI_M1_data, IR_wcs)
 
     #create a figure
     plt.figure()
