@@ -72,6 +72,6 @@ def create_wcs(header):
         the world coordinate system for the fits file
     """
     #create the WCS
-    fits_wcs = WCS(fits_header)
+    fits_wcs = WCS(header)
 
     return fits_wcs
