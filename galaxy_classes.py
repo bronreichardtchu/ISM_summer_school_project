@@ -24,6 +24,8 @@ from astropy.wcs import WCS
 from astropy import units
 from astropy import constants as consts
 
+from reproject import reproject_interp
+
 
 class Galaxy:
     """
@@ -102,11 +104,11 @@ class Galaxy:
         new_vel_header['BUNIT'] = "km s-1"
 
         #set these for the class
-        self.CO_data = data
-        self.CO_header = new_header
-        self.CO_vel_data = vel_data/1000 #converting to km/s
-        self.CO_vel_header = new_vel_header
-        self.CO_wcs = wcs
+        self.HI_data = data
+        self.HI_header = new_header
+        self.HI_vel_data = vel_data/1000 #converting to km/s
+        self.HI_vel_header = new_vel_header
+        self.HI_wcs = wcs
 
 
     def read_in_data_fits(self, filename):
@@ -153,3 +155,82 @@ class Galaxy:
         fits_wcs = WCS(header)
 
         return fits_wcs
+
+
+    def reproject_data(self):
+        """
+        Reprojects all the data to the same as IR
+        """
+        #reproject the CO data
+        reprojected_CO, _ = reproject_interp((self.CO_data, self.CO_header), self.IR_header)
+        reprojected_CO_vel, _ = reproject_interp((self.CO_vel_data, self.CO_vel_header), self.IR_header)
+
+        #reproject the HI data
+        reprojected_HI, _ = reproject_interp((self.HI_data, self.HI_header), self.IR_header)
+        reprojected_HI_vel, _ = reproject_interp((self.HI_vel_data, self.HI_vel_header), self.IR_header)
+
+        #set these for the class
+        self.reprojected_CO_data = reprojected_CO
+        self.reprojected_CO_vel_data = reprojected_CO_vel
+        self.reprojected_HI_data = reprojected_HI
+        self.reprojected_HI_vel_data = reprojected_HI_vel
+
+
+    def set_systematic_velocity(self, sys_vel):
+        """
+        Sets the systematic velocity
+        """
+        self.sys_vel = sys_vel
+
+
+    def correct_coordinates_for_rotation(self, data, wcs):
+        """
+        Creates RA, Dec and radius arrays, corrected for the rotation of the
+        galaxy
+
+        Parameters
+        ----------
+        data : :obj:'~numpy.ndarray'
+            the fits data as a numpy array
+
+        wcs : astropy WCS object
+            the world coordinate system for the fits file
+
+        Returns
+        -------
+        ra : :obj:'~numpy.ndarray'
+            the right ascension of each pixel in degrees
+
+        dec : :obj:'~numpy.ndarray'
+            the declination of each pixel in degrees
+
+        radius : :obj:'~numpy.ndarray'
+            the radius array of the galaxy corrected for rotation
+        """
+        #make a coordinate grid the same shape as the data
+        x, y = np.indices(data.shape)
+
+        #convert the coordinates to wcs
+        ra, dec = data_wcs.all_pix2world(x, y, 0)
+
+        #minus off the centre_coords
+        ra = ra - self.ra_centre
+        dec = dec - self.dec_centre
+
+        #PA
+        PA = 180 - self.PA
+
+        #rotate the ra and dec using a rotation matrix
+        ra = ra*np.cos(np.radians(PA)) - dec*np.sin(np.radians(PA))
+        dec = ra*np.sin(np.radians(PA)) + dec*np.cos(np.radians(PA))
+
+        #scale the dec for galaxy inclination
+        dec = dec / np.cos(np.radians(self.inclination))
+
+        #create the radius array
+        radius = np.sqrt(ra**2 + dec**2)
+
+        #find theta
+        theta = np.arctan2(dec, ra)
+
+        return ra, dec, radius, theta
