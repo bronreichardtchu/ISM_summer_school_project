@@ -16,9 +16,9 @@ PURPOSE:
 
 FUNCTIONS INCLUDED:
     find_the_centre
+    make_coords_array
+    correct_for_rotation
 
-MODIFICATION HISTORY:
-		v.1.0 - first created August 2019
 
 """
 import numpy as np
@@ -40,6 +40,7 @@ def find_the_centre(data, data_wcs):
     -------
 
     """
+    #think of a way to find the centre of the galaxy
 
 
 def make_coords_array(data, data_wcs, centre_coords):
@@ -60,12 +61,20 @@ def make_coords_array(data, data_wcs, centre_coords):
     Returns
     -------
     ra : :obj:'~numpy.ndarray'
-        the right ascension of each pixel
+        the right ascension of each pixel in degrees
 
     dec : :obj:'~numpy.ndarray'
-        the declination of each pixel
+        the declination of each pixel in degrees
 
     """
+    #if the shape has too many parts get rid of the outer ones
+    #this is particularly for the THINGS data
+    if len(data.shape) > 2:
+        print('flattening data a bit')
+        data = data[0,0,:,:]
+        data_wcs = data_wcs.dropaxis(2).dropaxis(2)
+
+
     #make a coordinate grid the same shape as the data
     x, y = np.indices(data.shape)
 
@@ -120,4 +129,4 @@ def correct_for_rotation(ra, dec, PA, inclination):
     #find theta ======> NOTE TO SELF: WHAT IS THETA?
     theta = np.arctan2(dec, ra)
 
-    return ra, dec, radius
+    return ra, dec, radius, theta
