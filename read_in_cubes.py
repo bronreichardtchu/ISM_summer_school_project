@@ -18,12 +18,7 @@ FUNCTIONS INCLUDED:
     read_in_data_fits
     create_wcs
 
-MODIFICATION HISTORY:
-		v.1.0 - first created August 2019
-
 """
-
-
 from astropy.io import fits
 from astropy.wcs import WCS
 from astropy import units
