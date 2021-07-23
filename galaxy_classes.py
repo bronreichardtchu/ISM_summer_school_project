@@ -19,9 +19,11 @@ FUNCTIONS INCLUDED:
 
 
 """
+import numpy as np
+
 from astropy.io import fits
 from astropy.wcs import WCS
-from astropy import units
+from astropy import units as u
 from astropy import constants as consts
 
 from reproject import reproject_interp
@@ -31,7 +33,8 @@ class Galaxy:
     """
     A class to hold all the information about the galaxy
     """
-    def __init__(self, ra_centre, dec_centre, PA, inclination):
+    def __init__(self, galaxy_name, ra_centre, dec_centre, PA, inclination):
+        self.galaxy_name = galaxy_name
         self.ra_centre = ra_centre
         self.dec_centre = dec_centre
         self.PA = PA
@@ -109,6 +112,16 @@ class Galaxy:
         self.HI_vel_data = vel_data/1000 #converting to km/s
         self.HI_vel_header = new_vel_header
         self.HI_wcs = wcs
+
+    def set_HI_BMIN_BMAJ(self, bmin, bmaj):
+        """
+        Adds these back into the header
+        """
+        self.HI_header['BMIN'] = bmin
+        self.HI_header['BMAJ'] = bmaj
+        self.HI_vel_header['BMIN'] = bmin
+        self.HI_vel_header['BMAJ'] = bmaj
+
 
 
     def read_in_data_fits(self, filename):
@@ -211,14 +224,17 @@ class Galaxy:
         x, y = np.indices(data.shape)
 
         #convert the coordinates to wcs
-        ra, dec = data_wcs.all_pix2world(x, y, 0)
+        ra, dec = wcs.all_pix2world(x, y, 0)
 
         #minus off the centre_coords
         ra = ra - self.ra_centre
         dec = dec - self.dec_centre
 
+        #degrees aren't the same in both directions
+        #ra = ra * np.cos(self.dec_centre)
+
         #PA
-        PA = 180 - self.PA
+        PA = 180-self.PA
 
         #rotate the ra and dec using a rotation matrix
         ra = ra*np.cos(np.radians(PA)) - dec*np.sin(np.radians(PA))
@@ -234,3 +250,50 @@ class Galaxy:
         theta = np.arctan2(dec, ra)
 
         return ra, dec, radius, theta
+
+
+    def convert_HI_intensity_units(self):
+        """
+        Converts the HI intensity from Jy/beam to K
+        """
+        #first get the beam area
+        beam_area = ((self.HI_header['BMAJ']*u.deg)*(self.HI_header['BMIN']*u.deg)/4) * np.pi / np.log(2)
+
+        #get the rest frequency
+        rest_freq = self.HI_header['RESTFREQ']*u.Hz
+
+        #get the equivalency object from astropy units
+        equiv = u.brightness_temperature(rest_freq)
+
+        #convert the units
+        intensity = (self.HI_data*u.Jy/beam_area).to(u.K, equivalencies=equiv).value
+
+        self.HI_data_K = intensity
+
+    def calculate_stellar_mass(self, mass_to_light=0.5):
+        """
+        Uses the IR data to calculate the stellar mass, corrected for inclination angle
+        """
+        stellar_mass = 330 * (mass_to_light/0.5) * np.cos(np.radians(self.inclination)) * self.IR_data
+
+        self.stellar_mass = stellar_mass
+
+    def calculate_atomic_gas_mass(self):
+        """
+        Calculates the atomic gas mass using the HI data (in K)
+        """
+        #convert the intensity to a number density
+        n_H = 1.823e18 * self.HI_data_K * u.cm**-2 *np.cos(np.radians(self.inclination))
+
+        #calculate the mass
+        atomic_gas_mass = (n_H * consts.m_p).to(u.Msun/u.pc**2).value
+
+        self.atomic_gas_mass = atomic_gas_mass
+
+    def calculate_molecular_gas_mass(self):
+        """
+        Calculates the molecular gas mass using the CO data
+        """
+        molecular_gas_mass = 6.7 * self.CO_data
+
+        self.molecular_gas_mass = molecular_gas_mass
