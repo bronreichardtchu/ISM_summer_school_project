@@ -32,13 +32,11 @@ from reproject import reproject_interp
 import matplotlib.pyplot as plt
 import cmasher as cmr
 
-import read_in_cubes as ric
-import getting_coordinates as get_coords
-
 import importlib
-importlib.reload(get_coords)
 
-def map_cube(data, fits_wcs, title, ax=None, log_data=False, diverging=False):
+
+
+def map_cube(data, fits_wcs, title, cbar_label, ax=None, log_data=False, diverging=False, **formats):
     """
     Maps the fits data to an imshow on a matplotlib axis
 
@@ -69,6 +67,7 @@ def map_cube(data, fits_wcs, title, ax=None, log_data=False, diverging=False):
     """
     if log_data == True:
         data = np.log10(data)
+        cbar_label = 'log ' + cbar_label
 
     #if there's no axis provided, create one.
     if ax is None:
@@ -80,10 +79,12 @@ def map_cube(data, fits_wcs, title, ax=None, log_data=False, diverging=False):
     ax.set_facecolor('white')
     #do the plotting
     if diverging == True:
-        map = ax.imshow(data, origin='lower', cmap=cmr.pride)
+        map = ax.imshow(data, origin='lower', cmap=cmr.pride, **formats)
     else:
-        map = ax.imshow(data, origin='lower', cmap=cmr.ember)#, vmin=-1.75, vmax=-0.25)
-    cbar = plt.colorbar(map, ax=ax)
+        map = ax.imshow(data, origin='lower', cmap=cmr.ember, **formats)
+    cbar = plt.colorbar(map, label=cbar_label, ax=ax, fraction=0.05, pad=0.04, extend='max')
+
+    #ax.invert_xaxis()
 
     ax.set_xlabel('RA')
     ax.set_ylabel('Dec')
@@ -95,21 +96,8 @@ def map_cube(data, fits_wcs, title, ax=None, log_data=False, diverging=False):
     return ax
 
 
-def fix_header(data, header, wcs):
-    """
-    Fixes the header, particularly for HI data
-    """
-    print('flattening data a bit')
-    data = data[0,0,:,:]
-    wcs = wcs.dropaxis(2).dropaxis(2)
-    new_header = wcs.to_header()
-    new_header['BUNIT'] = header['BUNIT']
-    new_header['RESTFREQ'] = header['RESTFREQ']
 
-    return data, new_header, wcs
-
-
-def maps_in_single_figure(IR_file, CO_M0_file, CO_M1_file, HI_M0_file, HI_M1_file, titles, diverging, log_data):
+def maps_in_single_figure(galaxy, titles, diverging, log_data):
     """
     Reads in data from the filenames and maps them
 
@@ -122,145 +110,87 @@ def maps_in_single_figure(IR_file, CO_M0_file, CO_M1_file, HI_M0_file, HI_M1_fil
     -------
     All the maps in a single figure
     """
-    #read in all the files
-    IR_data, IR_header = ric.read_in_data_fits(IR_file)
-    IR_wcs = ric.create_wcs(IR_header)
-
-    CO_M0_data, CO_M0_header = ric.read_in_data_fits(CO_M0_file)
-    CO_M0_wcs = ric.create_wcs(CO_M0_header)
-
-    CO_M1_data, CO_M1_header = ric.read_in_data_fits(CO_M1_file)
-    CO_M1_wcs = ric.create_wcs(CO_M1_header)
-
-    HI_M0_data, HI_M0_header = ric.read_in_data_fits(HI_M0_file)
-    HI_M0_wcs = ric.create_wcs(HI_M0_header)
-
-    HI_M1_data, HI_M1_header = ric.read_in_data_fits(HI_M1_file)
-    HI_M1_wcs = ric.create_wcs(HI_M1_header)
-
     #create a list of the data arrays
-    data_arrays = [IR_data, CO_M0_data, CO_M1_data, HI_M0_data, HI_M1_data]
-
-    #list of headers
-    headers = [IR_header, CO_M0_header, CO_M1_header, HI_M0_header, HI_M1_header]
+    data_arrays = [galaxy.IR_data, galaxy.reprojected_CO_data, galaxy.reprojected_CO_vel_data, galaxy.reprojected_HI_data, galaxy.reprojected_HI_vel_data]
 
     #list of wcs
-    wcs_list = [IR_wcs, CO_M0_wcs, CO_M1_wcs, HI_M0_wcs, HI_M1_wcs]
+    wcs_list = [galaxy.IR_wcs, galaxy.CO_wcs, galaxy.CO_wcs, galaxy.HI_wcs, galaxy.HI_wcs]
 
-    #reproject the data to match the stellar data
-    #CO_M0_data, CO_M0_footprint = reproject_interp((CO_M0_data, CO_M0_header), IR_wcs)
-    #CO_M1_data, CO_M1_footprint = reproject_interp((CO_M1_data, CO_M1_header), IR_wcs)
-    #HI_M0_data, HI_M0_footprint = reproject_interp((HI_M0_data, HI_M0_header), IR_wcs)
-    #HI_M1_data, HI_M1_footprint = reproject_interp((HI_M1_data, HI_M1_header), IR_wcs)
+    #formating
+    formats = [{}, dict(vmax=40, vmin=-10), dict(vmax=900, vmin=550), {}, {}]
+
+    cbar_labels = [galaxy.IR_header['BUNIT'], galaxy.CO_header['BUNIT'], galaxy.CO_vel_header['BUNIT'], galaxy.HI_header['BUNIT'], galaxy.HI_vel_header['BUNIT']]
+
 
     #create a figure
-    fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(10,6), subplot_kw={'projection': IR_wcs})
+    fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(10,6), subplot_kw={'projection': galaxy.IR_wcs})
 
     #iterate through the data
     for i, data in enumerate(data_arrays):
-
-        #if the shape has too many parts get rid of the outer ones
-        #this is particularly for the THINGS data
-        if len(data.shape) > 2:
-            data, headers[i], wcs_list[i] = fix_header(data, headers[i], wcs_list[i])
-
-
-        #reproject the data (not for the first one)
-        if i > 0:
-            reprojected_data, footprint = reproject_interp((data, wcs_list[i]), IR_header)
-
-
+        #correct the coordinates for rotation
+        ra, dec, radius, theta = galaxy.correct_coordinates_for_rotation(data, galaxy.IR_wcs)
 
         #make the figures
         if i < 3:
-            map_cube(data, IR_wcs, title=titles[i], ax=axes[int(np.floor(i/3)), i], diverging=diverging[i], log_data=log_data[i])
+            map_cube(data, galaxy.IR_wcs, title=titles[i], cbar_label=cbar_labels[i], ax=axes[int(np.floor(i/3)), i], diverging=diverging[i], log_data=log_data[i], **formats[i])
+
+            axes[int(np.floor(i/3)), i].contour(np.fliplr(radius), colors='gray', levels=[0.01, 0.06, 0.1, 0.2, 0.5])
+
         else:
-            map_cube(data, IR_wcs, title=titles[i], ax=axes[int(np.floor(i/3)), i-3], diverging=diverging[i], log_data=log_data[i])
+            map_cube(data, galaxy.IR_wcs, title=titles[i], cbar_label=cbar_labels[i], ax=axes[int(np.floor(i/3)), i-3], diverging=diverging[i], log_data=log_data[i], **formats[i])
+
+            axes[int(np.floor(i/3)), i-3].contour(np.fliplr(radius), colors='gray', levels=[0.01, 0.06, 0.1, 0.2, 0.5])
+
+    axes[1,2].axis('off')
+
+    plt.subplots_adjust(left=0.08, right=0.94, top=0.99, bottom=0.04, wspace=0.69, hspace=0.03)
+
+    plt.show()
+
+
+def quick_look_profile(galaxy):
+    """
+    Plots the radial profile of the IR intensity
+
+    Parameters
+    ----------
+    galaxy : class
+        the galaxy class
+    """
+    #correct the coordinates
+    ra, dec, radius, theta = galaxy.correct_coordinates_for_rotation(galaxy.IR_data, galaxy.IR_wcs)
+
+    #make the plot
+    plt.figure()
+    plt.scatter(radius, galaxy.IR_data)
+    plt.ylabel('I '+galaxy.IR_header['BUNIT'])
+    plt.xlabel('Radius')
 
     plt.show()
 
 
 
-def convert_intensity_mass_HI(data, CO_header):
-    """
-    Convert the intensity units for the HI data.
-    Should go from Jy/beam m/s to K m/s
-    """
-    #get the major and minor axis FWHM values from the fits header
-    FWHM_major = CO_header['BMAJ']
-    FWHM_minor = CO_header['BMIN']
-
-    #do the converstion to temp
-    intensity = (6.07 * 10e5 * data) / (FWHM_major * FWHM_minor)
-
-    #convert to number density
-    n_H = 1.823e18 * intensity
-
-    n_H = n_H * (u.cm*u.cm)**(-1)
-
-    #then convert to solar masses per kpc^2
-    sigma_mass = n_H * constants.m_p
-
-    sigma_mass = sigma_mass.to(u.solMass/u.kpc**2)
-
-    return sigma_mass
-
-
-
-def convert_intensity_mass_IR(data, mass_to_light=0.5):
-    """
-    Converts from intensity to mass for the IR WISE data, using a mass-to-light
-    ratio of 0.5
-    """
-    sigma_mass = 330*(mass_to_light/0.5) * data
-
-    return sigma_mass
-
-
-
-def convert_intensity_mass_CO(data, alpha_CO=4.35):
-    """
-    Converts from intensity to mass for the CO data
-    """
-    sigma_mol = 6.7 * (alpha_CO ** (1-0/4.35)) * data
-
-    return sigma_mol
-
-
-
-def intensity_profile(IR_file, CO_M0_file, HI_M0_file, labels, centre_coords, PA, inclination, z):
+def intensity_profile(galaxy, labels, z):
     """
     Plots the intensity vs the radius
     """
     #calculate the proper distance
     proper_dist = cosmo.kpc_proper_per_arcmin(z).to(u.kpc/u.degree)
 
-    #read in IR data
-    IR_data, IR_header = ric.read_in_data_fits(IR_file)
+    #create a list of the data arrays
+    data_arrays = [galaxy.IR_data, galaxy.reprojected_CO_data, galaxy.reprojected_HI_data]
 
-    #create the figure
+    #list of wcs
+    wcs_list = [galaxy.IR_wcs, galaxy.CO_wcs, galaxy.HI_wcs]
+
+
+    #create a figure
     plt.figure()
 
-    #iterate through the files
-    for i, data_file in enumerate([IR_file, CO_M0_file, HI_M0_file]):
-        #read in data
-        data, header = ric.read_in_data_fits(data_file)
-
-        #get the wcs
-        fits_wcs = ric.create_wcs(header)
-
-        if len(data.shape) > 2:
-            data, header, fits_wcs = fix_header(data, header, fits_wcs)
-
-        #reproject the data (not for the first one)
-        #if i > 0:
-        #    data, _ = reproject_interp((data, fits_wcs), IR_header)
-
-        #get the coordinates
-        ra, dec = get_coords.make_coords_array(data, fits_wcs, centre_coords)
-
-        #correct for inclination and PA and get radius
-        ra, dec, radius, theta = get_coords.correct_for_rotation(ra, dec, PA, inclination)
+    #iterate through the data
+    for i, data in enumerate(data_arrays):
+        #correct the coordinates for rotation
+        ra, dec, radius, theta = galaxy.correct_coordinates_for_rotation(data, galaxy.IR_wcs)
 
         #multiply through the radius to make it in kpc
         radius = radius * proper_dist
@@ -282,45 +212,30 @@ def intensity_profile(IR_file, CO_M0_file, HI_M0_file, labels, centre_coords, PA
     plt.show()
 
 
-def mass_profile(IR_file, CO_M0_file, HI_M0_file, labels, centre_coords, PA, inclination, z):
+def mass_profile(galaxy, labels, z):
     """
     Plots the mass vs the radius
     """
     #calculate the proper distance
     proper_dist = cosmo.kpc_proper_per_arcmin(z).to(u.kpc/u.degree)
 
-    #create the figure
+    #create a list of the data arrays
+    data_arrays = [galaxy.stellar_mass, galaxy.atomic_gas_mass, galaxy.molecular_gas_mass]
+
+    #list of wcs
+    wcs_list = [galaxy.IR_wcs, galaxy.HI_wcs, galaxy.CO_wcs]
+
+
+    #create a figure
     plt.figure()
 
-    #iterate through the files
-    for i, data_file in enumerate([IR_file, CO_M0_file, HI_M0_file]):
-        #read in data
-        data, header = ric.read_in_data_fits(data_file)
-
-        #get the wcs
-        fits_wcs = ric.create_wcs(header)
-
-        if len(data.shape) > 2:
-            data, header, fits_wcs = fix_header(data, header, fits_wcs)
-
-        #get the coordinates
-        ra, dec = get_coords.make_coords_array(data, fits_wcs, centre_coords)
-
-        #correct for inclination and PA and get radius
-        ra, dec, radius, theta = get_coords.correct_for_rotation(ra, dec, PA, inclination)
+    #iterate through the data
+    for i, data in enumerate(data_arrays):
+        #correct the coordinates for rotation
+        ra, dec, radius, theta = galaxy.correct_coordinates_for_rotation(data, galaxy.IR_wcs)
 
         #multiply through the radius to make it in kpc
         radius = radius * proper_dist
-
-        #convert the data to masses
-        if i == 0:
-            data = convert_intensity_mass_IR(data)
-
-        if i == 1:
-            data = convert_intensity_mass_CO(data)
-
-        if i == 2:
-            data = convert_intensity_mass_HI(data, header)
 
         #bin by radius
         binned_median_intensity, bin_edges, binnumber = stats.binned_statistic(radius.reshape(-1), data.reshape(-1), statistic='mean', bins=200)
